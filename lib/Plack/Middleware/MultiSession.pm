@@ -1,11 +1,10 @@
-package Plack::Middleware::MultiSession;
 use strict;
 use warnings;
-
-our $VERSION = '0.001';
+package Plack::Middleware::MultiSession;
+# ABSTRACT: Adds headers to allow Cross-Origin Resource Sharing
+use parent qw(Plack::Middleware::Session);
 
 use Plack::Util;
-
 use Plack::Util::Accessor qw(
     name
 );
@@ -43,4 +42,33 @@ sub call {
 }
 
 1;
+
+=head1 SYNOPSIS
+
+    builder {
+        enable 'MultiSession', name => 'permanant';
+        $app;
+    };
+
+=head1 DESCRIPTION
+
+Sets up a named session, allowing multiple to be in use at the same
+time.
+
+=head1 CONFIGURATION
+
+=over 8
+
+=item name
+
+The name of the session.
+
+=back
+
+=head1 SEE ALSO
+
+=for :list
+* L<Plack::Middleware::Session>
+
+=cut
 
