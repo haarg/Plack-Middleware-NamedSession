@@ -15,30 +15,57 @@ sub call {
     my $self = shift;
     my $env  = shift;
 
-    my $old_session = delete $env->{'psgix.session'};
-    my $old_options = delete $env->{'psgix.session.options'};
+    # save old session
+    my $orig_session = delete $env->{'psgix.session'};
+    my $orig_options = delete $env->{'psgix.session.options'};
 
-    my $m_sessions = $env->{'psgix.sessions'} ||= {};
-    my $m_options = $env->{'psgix.sessions.options'} ||= {};
-
+    # call parent
     my $app = $self->app;
     my $wrap_app = sub {
         my $env = shift;
-        if ($self->name) {
-            $m_sessions->{$self->name} = $env->{'psgix.session'};
-            $m_options->{$self->name} = $env->{'psgix.session.options'};
+        # store parent created session
+        my $session = delete $env->{'psgix.session'};
+        my $options = delete $env->{'psgix.session.options'};
+        my $name = $self->name;
+        $env->{"session.$name"} = $session;
+        $env->{"session.$name.options"} = $options;
+        # restore old session
+        if (defined $orig_session) {
+            $env->{'psgix.session'} = $orig_session;
+            $env->{'psgix.session.options'} = $orig_options;
+            undef $orig_session;
+            undef $orig_options;
         }
-        $app->($env);
+        # call original app
+        return $app->($env);
     };
-    $self->{app} = $app;
-    my $res = $self->SUPER::call($env);
+    $self->{app} = $wrap_app;
+    return $self->SUPER::call($env);
+}
 
-    $self->response_cb($res, sub {
-        if (defined $old_session) {
-            $env->{'psgix.session'} = $old_session;
-            $env->{'psgix.sessions.options'} = $old_options;
-        }
-    });
+sub finalize {
+    my ($self, $env, $res) = @_;
+
+    # save old session
+    my $orig_session = delete $env->{'psgix.session'};
+    my $orig_options = delete $env->{'psgix.session.options'};
+
+    # restore our session
+    my $name = $self->name;
+    $env->{'psgix.session'}         = delete $env->{"session.$name"};
+    $env->{'psgix.session.options'} = delete $env->{"session.$name.options"};
+
+    # call parent cleanup
+    $self->SUPER::finalize($env, $res);
+
+    delete $env->{'psgix.session'};
+    delete $env->{'psgix.session.options'};
+
+    # restore old session
+    if (defined $orig_session) {
+        $env->{'psgix.session'}          = $orig_session;
+        $env->{'psgix.session.options'} = $orig_options;
+    }
 }
 
 1;
