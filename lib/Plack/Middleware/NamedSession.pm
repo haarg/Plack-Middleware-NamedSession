@@ -2,25 +2,30 @@ use strict;
 use warnings;
 package Plack::Middleware::NamedSession;
 # ABSTRACT: Creates named sessions, allowing multiple simultaneously
-use parent qw(Plack::Middleware::Session);
+
+use parent 'Plack::Middleware';
 
 use Plack::Util;
 use Plack::Util::Accessor qw(
     name
+    session_mw
 );
+use Scalar::Util ();
 
-use parent 'Plack::Middleware::Session';
-
-sub call {
+sub prepare_app {
     my $self = shift;
-    my $env  = shift;
-
-    # save old session
-    my $orig_session = delete $env->{'psgix.session'};
-    my $orig_options = delete $env->{'psgix.session.options'};
-
+    my $name = $self->name;
     my $app = $self->app;
-    my $wrap_app = sub {
+    my $session_mw = $self->session_mw || $self->session_mw('Session');
+
+    if (! Scalar::Util::blessed($session_mw)) {
+        my %params = %$self;
+        delete $params{name};
+        delete $params{session_mw};
+        $session_mw = Plack::Util::load_class($session_mw, 'Plack::Middleware')->new(%params);
+    }
+
+    my $wrap_app = $session_mw->wrap(sub {
         my $env = shift;
         # store ::Session created session
         my $session = delete $env->{'psgix.session'};
@@ -29,44 +34,51 @@ sub call {
         $env->{"session.$name"} = $session;
         $env->{"session.$name.options"} = $options;
         # restore old session
-        if (defined $orig_session) {
-            $env->{'psgix.session'} = $orig_session;
-            $env->{'psgix.session.options'} = $orig_options;
-            undef $orig_session;
-            undef $orig_options;
+        if (exists $env->{'namedsession.backup'}) {
+            $env->{'psgix.session'} = delete $env->{'namedsession.backup'};
+            $env->{'psgix.session.options'} = delete $env->{'namedsession.backup.options'};
         }
         # call original app
-        return $app->($env);
-    };
-    local $self->{app} = $wrap_app;
-    return $self->SUPER::call($env);
+        my $res = $app->($env);
+        Plack::Util::response_cb($res, sub {
+            # save old session
+            if (exists $env->{'psgix.session'}) {
+                $env->{'namedsession.backup'} = delete $env->{'psgix.session'};
+                $env->{'namedsession.backup.options'} = delete $env->{'psgix.session.options'};
+            }
+
+            # restore our session
+            my $session = delete $env->{"session.$name"};
+            my $options = delete $env->{"session.$name.options"};
+            $env->{'psgix.session'} = $session;
+            $env->{'psgix.session.options'} = $options;
+        });
+    });
+
+    $self->app($wrap_app);
 }
 
-sub finalize {
-    my ($self, $env, $res) = @_;
+sub call {
+    my $self = shift;
+    my $env  = shift;
 
     # save old session
-    my $orig_session = delete $env->{'psgix.session'};
-    my $orig_options = delete $env->{'psgix.session.options'};
-
-    # restore our session
-    my $name = $self->name;
-    my $session = delete $env->{"session.$name"};
-    my $options = delete $env->{"session.$name.options"};
-    $env->{'psgix.session'} = $session;
-    $env->{'psgix.session.options'} = $options;
-
-    # call parent cleanup
-    $self->SUPER::finalize($env, $res);
-
-    delete $env->{'psgix.session'};
-    delete $env->{'psgix.session.options'};
-
-    # restore old session
-    if (defined $orig_session) {
-        $env->{'psgix.session'}         = $orig_session;
-        $env->{'psgix.session.options'} = $orig_options;
+    if (exists $env->{'psgix.session'}) {
+        $env->{'namedsession.backup'} = delete $env->{'psgix.session'};
+        $env->{'namedsession.backup.options'} = delete $env->{'psgix.session.options'};
     }
+
+    my $res = $self->app->($env);
+    Plack::Util::response_cb($res, sub {
+        delete $env->{'psgix.session'};
+        delete $env->{'psgix.session.options'};
+
+        # restore old session
+        if (exists $env->{'namedsession.backup'}) {
+            $env->{'psgix.session'}         = delete $env->{'namedsession.backup'};
+            $env->{'psgix.session.options'} = delete $env->{'namedsession.backup.options'};
+        }
+    });
 }
 
 1;
@@ -90,6 +102,10 @@ time.
 =item name
 
 The name of the session.
+
+=item session_mw
+
+The middleware class or object to use for the named session.
 
 =back
 
