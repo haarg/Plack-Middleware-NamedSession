@@ -19,11 +19,10 @@ sub call {
     my $orig_session = delete $env->{'psgix.session'};
     my $orig_options = delete $env->{'psgix.session.options'};
 
-    # call parent
     my $app = $self->app;
     my $wrap_app = sub {
         my $env = shift;
-        # store parent created session
+        # store ::Session created session
         my $session = delete $env->{'psgix.session'};
         my $options = delete $env->{'psgix.session.options'};
         my $name = $self->name;
@@ -39,7 +38,7 @@ sub call {
         # call original app
         return $app->($env);
     };
-    $self->{app} = $wrap_app;
+    local $self->{app} = $wrap_app;
     return $self->SUPER::call($env);
 }
 
@@ -52,8 +51,10 @@ sub finalize {
 
     # restore our session
     my $name = $self->name;
-    $env->{'psgix.session'}         = delete $env->{"session.$name"};
-    $env->{'psgix.session.options'} = delete $env->{"session.$name.options"};
+    my $session = delete $env->{"session.$name"};
+    my $options = delete $env->{"session.$name.options"};
+    $env->{'psgix.session'} = $session;
+    $env->{'psgix.session.options'} = $options;
 
     # call parent cleanup
     $self->SUPER::finalize($env, $res);
@@ -63,7 +64,7 @@ sub finalize {
 
     # restore old session
     if (defined $orig_session) {
-        $env->{'psgix.session'}          = $orig_session;
+        $env->{'psgix.session'}         = $orig_session;
         $env->{'psgix.session.options'} = $orig_options;
     }
 }
