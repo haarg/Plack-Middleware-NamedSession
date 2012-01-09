@@ -87,5 +87,30 @@ test_psgi
         is $called, 2, 'standard session restored';
     };
 
+$app_cb = sub {};
+test_psgi
+    app => builder {
+        enable 'NamedSession', name => 'coookies', session_mw => 'Session::Cookie';
+        sub {
+            my $env = shift;
+            my $res = [ 200, [ 'Content-Type' => 'text/plain' ], [ 'Hello World' ] ];
+            $app_cb->($env, $res);
+            return $res;
+        };
+    },
+    client => sub {
+        my $cb = with_cookies(shift);
+        my $res;
+
+        my $called;
+        $app_cb = sub {
+            my ($env, $res) = @_;
+            $called = ++$env->{'session.coookies'}{called};
+        };
+        $cb->();
+        $cb->();
+        is $called, 2, 'alternate session handling middleware working';
+    };
+
 done_testing;
 
