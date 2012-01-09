@@ -1,5 +1,5 @@
 NAME
-    Plack-Middleware-MultiSession - Adds named sessions, allowing multiple to be used simultaneously
+    Plack-Middleware-NamedSession - Creates named sessions, allowing multiple simultaneously
 
 INSTALLATION
     To install this distribution, run the following commands:

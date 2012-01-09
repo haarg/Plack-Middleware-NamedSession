@@ -1,7 +1,7 @@
 use strict;
 use warnings;
-package Plack::Middleware::MultiSession;
-# ABSTRACT: Adds headers to allow Cross-Origin Resource Sharing
+package Plack::Middleware::NamedSession;
+# ABSTRACT: Creates named sessions, allowing multiple simultaneously
 use parent qw(Plack::Middleware::Session);
 
 use Plack::Util;
@@ -74,7 +74,7 @@ sub finalize {
 =head1 SYNOPSIS
 
     builder {
-        enable 'MultiSession', name => 'permanant';
+        enable 'NamedSession', name => 'permanant';
         $app;
     };
 

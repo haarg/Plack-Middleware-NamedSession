@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Test::More 0.88;
 
-use Plack::Middleware::MultiSession;
+use Plack::Middleware::NamedSession;
 use Plack::Test;
 use Plack::Builder;
 use HTTP::Cookies;
@@ -10,7 +10,7 @@ use HTTP::Cookies;
 my $app_cb = sub {};
 test_psgi
     app => builder {
-        enable 'MultiSession', name => 'coookies';
+        enable 'NamedSession', name => 'coookies';
         sub {
             my $env = shift;
             my $res = [ 200, [ 'Content-Type' => 'text/plain' ], [ 'Hello World' ] ];
